@@ -202,6 +202,10 @@ private:
 
 	void		InitializeVehicleIMU();
 
+	DEFINE_PARAMETERS(
+		(ParamInt<px4::params::SENS_IMU_MODE>) _param_sens_imu_mode
+	)
+
 };
 
 Sensors::Sensors(bool hil_enabled) :
@@ -219,8 +223,6 @@ Sensors::Sensors(bool hil_enabled) :
 	_vehicle_acceleration.Start();
 	_vehicle_angular_velocity.Start();
 	_vehicle_air_data.Start();
-
-	InitializeVehicleIMU();
 }
 
 Sensors::~Sensors()
@@ -245,11 +247,8 @@ Sensors::~Sensors()
 
 bool Sensors::init()
 {
-	// initially run manually
-	ScheduleDelayed(10_ms);
-
 	_vehicle_imu_sub[0].registerCallback();
-
+	ScheduleNow();
 	return true;
 }
 
@@ -433,7 +432,7 @@ void Sensors::InitializeVehicleIMU()
 			gyro_sub.copy(&gyro);
 
 			if (accel.device_id > 0 && gyro.device_id > 0) {
-				VehicleIMU *imu = new VehicleIMU(i, i);
+				VehicleIMU *imu = new VehicleIMU(i, i, i);
 
 				if (imu != nullptr) {
 					// Start VehicleIMU instance and store
@@ -468,6 +467,7 @@ void Sensors::Run()
 
 	// run once
 	if (_last_config_update == 0) {
+		InitializeVehicleIMU();
 		_voted_sensors_update.init(_sensor_combined);
 		parameter_update_poll(true);
 	}

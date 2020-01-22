@@ -223,6 +223,10 @@ private:
 
 	sensor_selection_s _selection {};		/**< struct containing the sensor selection to be published to the uORB */
 	subsystem_info_s _info {};			/**< subsystem info publication */
+
+	DEFINE_PARAMETERS(
+		(ParamInt<px4::params::SENS_IMU_MODE>) _param_sens_imu_mode
+	)
 };
 
 } /* namespace sensors */

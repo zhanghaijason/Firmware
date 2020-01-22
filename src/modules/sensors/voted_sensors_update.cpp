@@ -570,12 +570,14 @@ void VotedSensorsUpdate::sensorsPoll(sensor_combined_s &raw, vehicle_magnetomete
 	magPoll(magnetometer);
 
 	// publish sensor selection if changed
-	if (_selection_changed) {
-		// don't publish until selected IDs are valid
-		if (_selection.accel_device_id > 0 && _selection.gyro_device_id > 0) {
-			_selection.timestamp = hrt_absolute_time();
-			_sensor_selection_pub.publish(_selection);
-			_selection_changed = false;
+	if (_param_sens_imu_mode.get() == 1) {
+		if (_selection_changed) {
+			// don't publish until selected IDs are valid
+			if (_selection.accel_device_id > 0 && _selection.gyro_device_id > 0) {
+				_selection.timestamp = hrt_absolute_time();
+				_sensor_selection_pub.publish(_selection);
+				_selection_changed = false;
+			}
 		}
 	}
 }

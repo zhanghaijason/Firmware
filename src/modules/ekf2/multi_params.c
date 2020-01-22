@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (C) 2019 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2020 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -32,59 +32,17 @@
  ****************************************************************************/
 
 /**
- * @file BlockingList.hpp
+ * EKF instances
  *
- * A blocking intrusive linked list.
+ * Multi-EKF disabled if 0.
+ *
+ * @group EKF2
+ * @min 0
+ * @max 9
  */
+PARAM_DEFINE_INT32(EKF2_MULTI_INST, 0);
 
-#pragma once
-
-#include "IntrusiveSortedList.hpp"
-#include "LockGuard.hpp"
-
-#include <pthread.h>
-#include <stdlib.h>
-
-template<class T>
-class BlockingList : public IntrusiveSortedList<T>
-{
-public:
-
-	~BlockingList()
-	{
-		pthread_mutex_destroy(&_mutex);
-		pthread_cond_destroy(&_cv);
-	}
-
-	void add(T newNode)
-	{
-		LockGuard lg{_mutex};
-		IntrusiveSortedList<T>::add(newNode);
-	}
-
-	bool remove(T removeNode)
-	{
-		LockGuard lg{_mutex};
-		return IntrusiveSortedList<T>::remove(removeNode);
-	}
-
-	size_t size()
-	{
-		LockGuard lg{_mutex};
-		return IntrusiveSortedList<T>::size();
-	}
-
-	void clear()
-	{
-		LockGuard lg{_mutex};
-		IntrusiveSortedList<T>::clear();
-	}
-
-	pthread_mutex_t &mutex() { return _mutex; }
-
-private:
-
-	pthread_mutex_t	_mutex = PTHREAD_MUTEX_INITIALIZER;
-	pthread_cond_t	_cv = PTHREAD_COND_INITIALIZER;
-
-};
+// TODO:
+//  - mag bias (EKF2_MAGBIAS_X, EKF2_MAGBIAS_Y, EKF2_MAGBIAS_Z, EKF2_MAGBIAS_ID)
+//  - mag declination (EKF2_MAG_DECL)
+//  - per instance IMU noise
