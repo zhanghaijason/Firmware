@@ -42,3 +42,6 @@ else
 	# mpu9250 internal SPI bus mpu9250
 	mpu9250 -s -R 8 start
 fi
+
+# mRo GPS/compass puck
+ist8310 -I -b 1 -R 8 start

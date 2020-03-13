@@ -102,7 +102,7 @@ then
 	ak09916 -X -R 6 start # external AK09916 (Here2) is rotated 270 degrees yaw
 	hmc5883 -T -X start
 	ist8308 -X start
-	ist8310 -X start
+	ist8310 -X -R 12 start # typically (but not always) mounted on bottom of board
 	lis2mdl -X start
 	lis3mdl -X start
 	qmc5883 -X start
