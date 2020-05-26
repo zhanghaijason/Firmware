@@ -58,7 +58,7 @@ public:
 	void set_temperature(float temperature) { _temperature = temperature; }
 	void set_external(bool external) { _external = external; }
 
-	void update(hrt_abstime timestamp_sample, float x, float y, float z);
+	void update(const hrt_abstime &timestamp_sample, float x, float y, float z);
 
 	int get_class_instance() { return _class_device_instance; };
 
