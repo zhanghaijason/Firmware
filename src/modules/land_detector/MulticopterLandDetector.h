@@ -76,15 +76,6 @@ protected:
 	float _get_max_altitude() override;
 private:
 
-	/** Get control mode dependent pilot throttle threshold with which we should quit landed state and take off. */
-	float _get_takeoff_throttle();
-
-	bool _has_low_thrust();
-	bool _has_minimal_thrust();
-	bool _has_altitude_lock();
-	bool _has_position_lock();
-	bool _is_climb_rate_enabled();
-
 	/** Time in us that landing conditions have to hold before triggering a land. */
 	static constexpr hrt_abstime LAND_DETECTOR_TRIGGER_TIME_US = 300_ms;
 
@@ -115,21 +106,20 @@ private:
 	} _params{};
 
 	uORB::Subscription _actuator_controls_sub{ORB_ID(actuator_controls_0)};
+	uORB::Subscription _hover_thrust_estimate_sub{ORB_ID(hover_thrust_estimate)};
 	uORB::Subscription _vehicle_acceleration_sub{ORB_ID(vehicle_acceleration)};
 	uORB::Subscription _vehicle_angular_velocity_sub{ORB_ID(vehicle_angular_velocity)};
 	uORB::Subscription _vehicle_control_mode_sub{ORB_ID(vehicle_control_mode)};
 	uORB::Subscription _vehicle_local_position_sub{ORB_ID(vehicle_local_position)};
 	uORB::Subscription _vehicle_local_position_setpoint_sub{ORB_ID(vehicle_local_position_setpoint)};
-	uORB::Subscription _hover_thrust_estimate_sub{ORB_ID(hover_thrust_estimate)};
 
 	actuator_controls_s               _actuator_controls {};
+	hover_thrust_estimate_s           _hover_thrust_estimate{};
 	vehicle_angular_velocity_s        _vehicle_angular_velocity{};
 	vehicle_control_mode_s            _vehicle_control_mode {};
 	vehicle_local_position_setpoint_s _vehicle_local_position_setpoint {};
 
-	bool _hover_thrust_initialized{false};
-
-	hrt_abstime _min_trust_start{0};	///< timestamp when minimum trust was applied first
+	hrt_abstime _min_thrust_start{0};	///< timestamp when minimum trust was applied first
 	hrt_abstime _landed_time{0};
 
 	bool _in_descend{false};		///< vehicle is desending
