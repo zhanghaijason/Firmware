@@ -66,6 +66,7 @@ px4_add_board(
 		events
 		fw_att_control
 		fw_pos_control_l1
+		gyro_fft
 		land_detector
 		landing_target_estimator
 		load_mon
@@ -114,6 +115,7 @@ px4_add_board(
 		ver
 		work_queue
 	EXAMPLES
+		fake_gyro
 		fixedwing_control # Tutorial code from https://px4.io/dev/example_fixedwing_control
 		hello
 		hwtest # Hardware test
