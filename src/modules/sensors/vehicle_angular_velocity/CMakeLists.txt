@@ -40,7 +40,7 @@ target_compile_options(vehicle_angular_velocity PRIVATE ${MAX_CUSTOM_OPT_LEVEL})
 
 target_link_libraries(vehicle_angular_velocity
 	PRIVATE
+		calibration
 		mathlib
-		sensor_calibration
 		px4_work_queue
 )

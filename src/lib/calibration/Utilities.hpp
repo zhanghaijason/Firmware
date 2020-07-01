@@ -33,72 +33,21 @@
 
 #pragma once
 
-#include <lib/conversion/rotation.h>
-#include <lib/matrix/matrix/math.hpp>
-#include <px4_platform_common/px4_config.h>
-#include <px4_platform_common/log.h>
-#include <uORB/Subscription.hpp>
-#include <uORB/topics/sensor_correction.h>
+#include <matrix/math.hpp>
 
-namespace sensors
+namespace sensors::calibration
 {
 
-class SensorCalibration
-{
-public:
+int8_t FindCalibrationIndex(const char *sensor_type, uint32_t device_id);
 
-	enum class SensorType : uint8_t {
-		Accelerometer,
-		Gyroscope,
-	};
+int32_t GetCalibrationParam(const char *sensor_type, const char *cal_type, uint8_t instance);
+void SetCalibrationParam(const char *sensor_type, const char *cal_type, uint8_t instance, int32_t value);
 
-	SensorCalibration() = delete;
-	explicit SensorCalibration(SensorType type) : _type(type) {}
-	~SensorCalibration() = default;
+matrix::Vector3f GetCalibrationParamsVector3f(const char *sensor_type, const char *cal_type, uint8_t instance);
+void SetCalibrationParamsVector3f(const char *sensor_type, const char *cal_type, uint8_t instance,
+				  matrix::Vector3f values);
 
-	void PrintStatus();
+matrix::Dcmf GetBoardRotation();
 
-	void set_device_id(uint32_t device_id);
-	void set_external(bool external = true) { _external = external; }
 
-	uint32_t device_id() const { return _device_id; }
-	bool enabled() const { return _enabled; }
-	bool external() const { return _external; }
-
-	// apply offsets and scale
-	// rotate corrected measurements from sensor to body frame
-	matrix::Vector3f Correct(const matrix::Vector3f &data);
-
-	void ParametersUpdate();
-	void SensorCorrectionsUpdate(bool force = false);
-
-	const matrix::Dcmf &getBoardRotation() const { return _rotation; }
-
-private:
-
-	static constexpr int MAX_SENSOR_COUNT = 3;
-
-	static constexpr uint8_t DEFAULT_PRIORITY = 50;
-
-	int FindCalibrationIndex(uint32_t device_id) const;
-
-	const char *SensorString() const;
-
-	uORB::Subscription _sensor_correction_sub{ORB_ID(sensor_correction)};
-
-	matrix::Dcmf _rotation;
-
-	matrix::Vector3f _offset{0.f, 0.f, 0.f};
-	matrix::Vector3f _scale{1.f, 1.f, 1.f};
-
-	matrix::Vector3f _thermal_offset{0.f, 0.f, 0.f};
-
-	uint32_t _device_id{0};
-
-	const SensorType _type;
-
-	bool _enabled{true};
-	bool _external{false};
-};
-
-} // namespace sensors
+} // namespace sensors::calibration

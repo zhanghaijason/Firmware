@@ -34,4 +34,10 @@
 px4_add_library(calibration
 	MagnetometerCalibration.cpp
 	MagnetometerCalibration.hpp
+	SensorCalibration.cpp
+	SensorCalibration.hpp
+	Utilities.cpp
+	Utilities.hpp
 )
+#target_compile_options(sensor_calibration PRIVATE ${MAX_CUSTOM_OPT_LEVEL})
+#target_include_directories(sensor_calibration PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/..)

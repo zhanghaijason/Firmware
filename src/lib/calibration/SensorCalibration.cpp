@@ -33,10 +33,13 @@
 
 #include "SensorCalibration.hpp"
 
+#include <lib/calibration/Utilities.hpp>
 #include <lib/parameters/param.h>
 
 using namespace matrix;
+using namespace sensors::calibration;
 using namespace time_literals;
+
 using math::radians;
 
 namespace sensors
@@ -68,31 +71,6 @@ const char *SensorCalibration::SensorString() const
 	}
 
 	return nullptr;
-}
-
-int SensorCalibration::FindCalibrationIndex(uint32_t device_id) const
-{
-	if (device_id == 0) {
-		return -1;
-	}
-
-	for (unsigned i = 0; i < MAX_SENSOR_COUNT; ++i) {
-		char str[16] {};
-		sprintf(str, "CAL_%s%u_ID", SensorString(), i);
-
-		int32_t device_id_val = 0;
-
-		if (param_get(param_find(str), &device_id_val) != OK) {
-			PX4_ERR("Could not access param %s", str);
-			continue;
-		}
-
-		if ((uint32_t)device_id_val == device_id) {
-			return i;
-		}
-	}
-
-	return -1;
 }
 
 void SensorCalibration::SensorCorrectionsUpdate(bool force)
@@ -151,20 +129,7 @@ void SensorCalibration::ParametersUpdate()
 	}
 
 	if (!_external) {
-		// fine tune the rotation
-		float x_offset = 0.f;
-		float y_offset = 0.f;
-		float z_offset = 0.f;
-		param_get(param_find("SENS_BOARD_X_OFF"), &x_offset);
-		param_get(param_find("SENS_BOARD_Y_OFF"), &y_offset);
-		param_get(param_find("SENS_BOARD_Z_OFF"), &z_offset);
-
-		const Dcmf board_rotation_offset(Eulerf(radians(x_offset), radians(y_offset), radians(z_offset)));
-
-		// get transformation matrix from sensor/board to body frame
-		int32_t board_rot = 0;
-		param_get(param_find("SENS_BOARD_ROT"), &board_rot);
-		_rotation = board_rotation_offset * get_rot_matrix((enum Rotation)board_rot);
+		_rotation = GetBoardRotation();
 
 	} else {
 		// TODO: per sensor external rotation
@@ -172,38 +137,26 @@ void SensorCalibration::ParametersUpdate()
 	}
 
 
-	int calibration_index = FindCalibrationIndex(_device_id);
+	int calibration_index = FindCalibrationIndex(SensorString(), _device_id);
 
 	if (calibration_index >= 0) {
 
-		char str[30] {};
-
-		sprintf(str, "CAL_%s%u_PRIO", SensorString(), calibration_index);
-		int32_t priority_val = DEFAULT_PRIORITY;
-		param_get(param_find(str), &priority_val);
+		int32_t priority_val = GetCalibrationParam(SensorString(), "PRIO", calibration_index);
 
 		if (priority_val < 0 || priority_val > 100) {
 			// reset to default
-			int32_t new_priority = DEFAULT_PRIORITY;
-			PX4_ERR("%s invalid value %d, resetting to %d", str, priority_val, new_priority);
-			param_set_no_notification(param_find(str), &new_priority);
+			PX4_ERR("%s %d invalid priorit %d, resetting to %d", SensorString(), calibration_index, priority_val, DEFAULT_PRIORITY);
+			SetCalibrationParam(SensorString(), "PRIO", calibration_index, DEFAULT_PRIORITY);
 		}
 
 		_enabled = (priority_val > 0);
 
-		for (int axis = 0; axis < 3; axis++) {
-			char axis_char = 'X' + axis;
+		_offset = GetCalibrationParamsVector3f(SensorString(), "OFF", calibration_index);
 
-			// offsets
-			sprintf(str, "CAL_%s%u_%cOFF", SensorString(), calibration_index, axis_char);
-			param_get(param_find(str), &_offset(axis));
-
-			// scale
-			// gyroscope doesn't have a scale factor calibration
-			if (_type != SensorType::Gyroscope) {
-				sprintf(str, "CAL_%s%u_%cSCALE", SensorString(), calibration_index, axis_char);
-				param_get(param_find(str), &_scale(axis));
-			}
+		// scale
+		// gyroscope doesn't have a scale factor calibration
+		if (_type != SensorType::Gyroscope) {
+			_scale = GetCalibrationParamsVector3f(SensorString(), "SCALE", calibration_index);
 		}
 
 	} else {

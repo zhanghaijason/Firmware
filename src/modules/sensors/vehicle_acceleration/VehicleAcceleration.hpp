@@ -33,8 +33,7 @@
 
 #pragma once
 
-#include <sensor_calibration/SensorCalibration.hpp>
-
+#include <lib/calibration/SensorCalibration.hpp>
 #include <lib/mathlib/math/Limits.hpp>
 #include <lib/matrix/matrix/math.hpp>
 #include <lib/mathlib/math/filter/LowPassFilter2pVector3f.hpp>

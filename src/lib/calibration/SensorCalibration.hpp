@@ -33,22 +33,28 @@
 
 #pragma once
 
-#include <px4_platform_common/px4_config.h>
-#include <px4_platform_common/log.h>
 #include <lib/conversion/rotation.h>
 #include <lib/matrix/matrix/math.hpp>
+#include <px4_platform_common/px4_config.h>
+#include <px4_platform_common/log.h>
 #include <uORB/Subscription.hpp>
-#include <uORB/topics/actuator_controls.h>
-#include <uORB/topics/battery_status.h>
+#include <uORB/topics/sensor_correction.h>
 
 namespace sensors
 {
 
-class MagnetometerCalibration
+class SensorCalibration
 {
 public:
-	MagnetometerCalibration() = default;
-	~MagnetometerCalibration() = default;
+
+	enum class SensorType : uint8_t {
+		Accelerometer,
+		Gyroscope,
+	};
+
+	SensorCalibration() = delete;
+	explicit SensorCalibration(SensorType type) : _type(type) {}
+	~SensorCalibration() = default;
 
 	void PrintStatus();
 
@@ -56,8 +62,7 @@ public:
 	void set_external(bool external = true) { _external = external; }
 
 	uint32_t device_id() const { return _device_id; }
-	int32_t priority() const { return _priority; }
-	bool enabled() const { return (_priority > 0); }
+	bool enabled() const { return _enabled; }
 	bool external() const { return _external; }
 
 	// apply offsets and scale
@@ -67,25 +72,30 @@ public:
 	void ParametersUpdate();
 	void SensorCorrectionsUpdate(bool force = false);
 
-	void UpdatePower(float power) { _power = power; }
+	const matrix::Dcmf &getBoardRotation() const { return _rotation; }
 
 private:
 
-	static constexpr int MAX_SENSOR_COUNT = 4;
+	static constexpr int MAX_SENSOR_COUNT = 3;
 
-	static constexpr uint8_t MAG_DEFAULT_PRIORITY = 50;
-	static constexpr uint8_t MAG_DEFAULT_EXTERNAL_PRIORITY = 75;
+	static constexpr uint8_t DEFAULT_PRIORITY = 50;
+
+	const char *SensorString() const;
+
+	uORB::Subscription _sensor_correction_sub{ORB_ID(sensor_correction)};
 
 	matrix::Dcmf _rotation;
 
-	matrix::Vector3f _offset;
-	matrix::Matrix3f _scale;
-	matrix::Vector3f _power_compensation;
-	float _power{0.f};
+	matrix::Vector3f _offset{0.f, 0.f, 0.f};
+	matrix::Vector3f _scale{1.f, 1.f, 1.f};
+
+	matrix::Vector3f _thermal_offset{0.f, 0.f, 0.f};
 
 	uint32_t _device_id{0};
 
-	int32_t _priority{MAG_DEFAULT_PRIORITY};
+	const SensorType _type;
+
+	bool _enabled{true};
 	bool _external{false};
 };
 

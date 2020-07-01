@@ -33,10 +33,13 @@
 
 #include "MagnetometerCalibration.hpp"
 
+#include "Utilities.hpp"
 #include <lib/parameters/param.h>
 
 using namespace matrix;
+using namespace sensors::calibration;
 using namespace time_literals;
+
 using math::radians;
 
 namespace sensors
@@ -55,70 +58,28 @@ Vector3f MagnetometerCalibration::Correct(const Vector3f &data)
 	return _rotation * (_scale * ((data + _power * _power_compensation) - _offset));
 }
 
-int MagnetometerCalibration::FindCalibrationIndex(uint32_t device_id) const
-{
-	if (device_id == 0) {
-		return -1;
-	}
-
-	for (unsigned i = 0; i < MAX_SENSOR_COUNT; ++i) {
-		char str[16] {};
-		sprintf(str, "CAL_%s%u_ID", SensorString(), i);
-
-		int32_t device_id_val = 0;
-
-		if (param_get(param_find(str), &device_id_val) != OK) {
-			PX4_ERR("Could not access param %s", str);
-			continue;
-		}
-
-		if ((uint32_t)device_id_val == device_id) {
-			return i;
-		}
-	}
-
-	return -1;
-}
-
 void MagnetometerCalibration::ParametersUpdate()
 {
 	if (_device_id == 0) {
 		return;
 	}
 
-	const int calibration_index = FindCalibrationIndex(_device_id);
+	const int calibration_index = FindCalibrationIndex("MAG", _device_id);
 
 	if (calibration_index >= 0) {
 
 		char str[30] {};
 
 		if (!_external) {
-			// fine tune the rotation
-			float x_offset = 0.f;
-			float y_offset = 0.f;
-			float z_offset = 0.f;
-			param_get(param_find("SENS_BOARD_X_OFF"), &x_offset);
-			param_get(param_find("SENS_BOARD_Y_OFF"), &y_offset);
-			param_get(param_find("SENS_BOARD_Z_OFF"), &z_offset);
-
-			const Dcmf board_rotation_offset(Eulerf(radians(x_offset), radians(y_offset), radians(z_offset)));
-
-			// get transformation matrix from sensor/board to body frame
-			int32_t board_rot = 0;
-			param_get(param_find("SENS_BOARD_ROT"), &board_rot);
-			_rotation = board_rotation_offset * get_rot_matrix((enum Rotation)board_rot);
+			_rotation = GetBoardRotation();
 
 		} else {
-			sprintf(str, "CAL_%s%u_ROT", SensorString(), calibration_index);
-			int32_t rotation = 0;
-			param_get(param_find(str), &rotation);
-
+			int32_t rotation = GetCalibrationParam("MAG", "ROT", calibration_index);
 			_rotation = get_rot_matrix((enum Rotation)rotation);
 		}
 
 		// CAL_MAGx_PRIO
-		sprintf(str, "CAL_%s%u_PRIO", SensorString(), calibration_index);
-		param_get(param_find(str), &_priority);
+		_priority = GetCalibrationParam("MAG", "PRIO", calibration_index);
 
 		if (_priority < 0 || _priority > 100) {
 			// reset to default
@@ -128,28 +89,10 @@ void MagnetometerCalibration::ParametersUpdate()
 			param_set_no_notification(param_find(str), &_priority);
 		}
 
-		Vector3f diag{1.f, 1.f, 1.f};
-		Vector3f offdiag{0.f, 0.f, 0.f};
-
-		for (int axis = 0; axis < 3; axis++) {
-			char axis_char = 'X' + axis;
-
-			// offsets
-			sprintf(str, "CAL_%s%u_%cOFF", SensorString(), calibration_index, axis_char);
-			param_get(param_find(str), &_offset(axis));
-
-			// scale
-			sprintf(str, "CAL_%s%u_%cSCALE", SensorString(), calibration_index, axis_char);
-			param_get(param_find(str), &diag(axis));
-
-			// off diagonal factors
-			sprintf(str, "CAL_%s%u_%cODIAG", SensorString(), calibration_index, axis_char);
-			param_get(param_find(str), &offdiag(axis));
-
-			// power compensation
-			sprintf(str, "CAL_%s%u_%cCOMP", SensorString(), calibration_index, axis_char);
-			param_get(param_find(str), &_power_compensation(axis));
-		}
+		_offset = GetCalibrationParamsVector3f("MAG", "OFF", calibration_index);
+		Vector3f diag = GetCalibrationParamsVector3f("MAG", "SCALE", calibration_index);
+		Vector3f offdiag = GetCalibrationParamsVector3f("MAG", "ODIAG", calibration_index);
+		_power_compensation = GetCalibrationParamsVector3f("MAG", "COMP", calibration_index);
 
 		float scale[9] {
 			diag(0),    offdiag(0), offdiag(1),
@@ -170,7 +113,7 @@ void MagnetometerCalibration::ParametersUpdate()
 
 void MagnetometerCalibration::PrintStatus()
 {
-	PX4_INFO("%s %d EN: %d, offset: [%.4f %.4f %.4f] scale: [%.4f %.4f %.4f]", SensorString(), device_id(), enabled(),
+	PX4_INFO("%s %d EN: %d, offset: [%.4f %.4f %.4f] scale: [%.4f %.4f %.4f]", "MAG", device_id(), enabled(),
 		 (double)_offset(0), (double)_offset(1), (double)_offset(2),
 		 (double)_scale(0, 0), (double)_scale(1, 1), (double)_scale(2, 2));
 
