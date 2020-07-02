@@ -60,12 +60,18 @@ public:
 		bool rtl_at_end {false};
 	};
 
+	enum class HeightSource {
+		Baro,
+		Gps
+	};
+
 	void connect(const std::string uri);
 	void wait_until_ready();
 	void wait_until_ready_local_position_only();
 	void store_home();
 	void check_home_within(float acceptance_radius_m);
 	void set_takeoff_altitude(const float altitude_m);
+	void set_height_source(HeightSource height_source);
 	void arm();
 	void takeoff();
 	void land();
