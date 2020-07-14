@@ -53,6 +53,7 @@
 
 #include <drivers/drv_hrt.h>
 #include <mathlib/math/Limits.hpp>
+#include <px4_platform/cpuload.h>
 #include <px4_platform_common/getopt.h>
 #include <px4_platform_common/log.h>
 #include <px4_platform_common/posix.h>
@@ -1375,16 +1376,8 @@ void Logger::print_load_callback(void *user)
 
 void Logger::initialize_load_output(PrintLoadReason reason)
 {
-	perf_callback_data_t callback_data;
-	callback_data.logger = this;
-	callback_data.counter = 0;
-	callback_data.buffer = nullptr;
-	char buffer[140];
-	hrt_abstime curr_time = hrt_absolute_time();
-	init_print_load_s(curr_time, &_load);
-	// this will not yet print anything
-	print_load_buffer(curr_time, buffer, sizeof(buffer), print_load_callback, &callback_data, &_load);
-	_next_load_print = curr_time + 1000000;
+	init_print_load(&_load);
+	_next_load_print = hrt_absolute_time() + 2_s;
 	_print_load_reason = reason;
 }
 
@@ -1399,11 +1392,11 @@ void Logger::write_load_output()
 	callback_data.logger = this;
 	callback_data.counter = 0;
 	callback_data.buffer = buffer;
-	hrt_abstime curr_time = hrt_absolute_time();
 	_writer.set_need_reliable_transfer(true);
 	// TODO: maybe we should restrict the output to a selected backend (eg. when file logging is running
 	// and mavlink log is started, this will be added to the file as well)
-	print_load_buffer(curr_time, buffer, sizeof(buffer), print_load_callback, &callback_data, &_load);
+	print_load_buffer(buffer, sizeof(buffer), print_load_callback, &callback_data, &_load);
+	cpuload_monitor_stop();
 	_writer.set_need_reliable_transfer(false);
 }
 

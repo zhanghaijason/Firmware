@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2018 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2020 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,48 +31,32 @@
  *
  ****************************************************************************/
 
-#pragma once
+/**
+ * @file cpuload.c
+ *
+ * Measurement of CPU load of each individual task.
+ *
+ * @author Lorenz Meier <lorenz@px4.io>
+ * @author Petri Tanskanen <petri.tanskanen@inf.ethz.ch>
+ */
+#include <px4_platform_common/px4_config.h>
+#include <px4_platform_common/atomic.h>
+#include <px4_platform/cpuload.h>
 
 #include <drivers/drv_hrt.h>
 
-#ifdef __PX4_NUTTX
-#include <sched.h>
-#include <px4_platform/cpuload.h>
-#endif /* __PX4_NUTTX */
+#include <sys/time.h>
 
-namespace px4
+static px4::atomic_int idle_thread_only{true};
+
+void cpuload_monitor_start()
 {
-namespace logger
+	idle_thread_only.store(false);
+}
+
+void cpuload_monitor_stop()
 {
+	idle_thread_only.store(true);
+}
 
-struct watchdog_data_t {
-#ifdef __PX4_NUTTX
-	int logger_main_task_index = -1;
-	int logger_writer_task_index = -1;
-	hrt_abstime ready_to_run_timestamp = hrt_absolute_time();
-	uint8_t last_state = TSTATE_TASK_INVALID;
-#endif /* __PX4_NUTTX */
-};
-
-
-/**
- * Initialize the watchdog, fill in watchdog_data.
- */
-void watchdog_initialize(const pid_t pid_logger_main, const pthread_t writer_thread, watchdog_data_t &watchdog_data);
-
-/**
- * Update the watchdog and trigger it if necessary. It is triggered when the log writer task is in
- * ready state for a certain period of time, but did not get scheduled. It means that most likely
- * some other higher-prio task runs busy.
- * When the watchdog triggers, it boosts the priority of the logger's main & writer tasks to maximum, so
- * that they get scheduled again.
- *
- * Expected to be called from IRQ context.
- *
- * @param watchdog_data
- * @return true if watchdog is triggered, false otherwise
- */
-bool watchdog_update(watchdog_data_t &watchdog_data);
-
-} //namespace logger
-} //namespace px4
+// TODO
