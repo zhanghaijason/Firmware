@@ -49,7 +49,7 @@
 #include "state_machine_helper.h"
 #include "commander_helper.h"
 
-static constexpr const char reason_no_rc[] = "no RC";
+static constexpr const char reason_no_rc[] = "No manual control stick input";
 static constexpr const char reason_no_offboard[] = "no offboard";
 static constexpr const char reason_no_rc_and_no_offboard[] = "no RC and no offboard";
 static constexpr const char reason_no_local_position[] = "no local position";
@@ -1042,12 +1042,12 @@ void battery_failsafe(orb_advert_t *mavlink_log_pub, const vehicle_status_s &sta
 			if (status_flags.condition_global_position_valid && status_flags.condition_home_position_valid) {
 				internal_state->main_state = commander_state_s::MAIN_STATE_AUTO_RTL;
 				internal_state->timestamp = hrt_absolute_time();
-				mavlink_log_critical(mavlink_log_pub, "%s, executing RTL", battery_critical);
+				mavlink_log_critical(mavlink_log_pub, "%s, executing RTL", battery_dangerous);
 
 			} else {
 				internal_state->main_state = commander_state_s::MAIN_STATE_AUTO_LAND;
 				internal_state->timestamp = hrt_absolute_time();
-				mavlink_log_emergency(mavlink_log_pub, "%s, can't execute RTL, landing instead", battery_critical);
+				mavlink_log_emergency(mavlink_log_pub, "%s, can't execute RTL, landing instead", battery_dangerous);
 			}
 
 			break;
@@ -1058,7 +1058,7 @@ void battery_failsafe(orb_advert_t *mavlink_log_pub, const vehicle_status_s &sta
 		case LOW_BAT_ACTION::LAND:
 			internal_state->main_state = commander_state_s::MAIN_STATE_AUTO_LAND;
 			internal_state->timestamp = hrt_absolute_time();
-			mavlink_log_emergency(mavlink_log_pub, "%s, landing", battery_critical);
+			mavlink_log_emergency(mavlink_log_pub, "%s, landing", battery_dangerous);
 
 			break;
 		}
