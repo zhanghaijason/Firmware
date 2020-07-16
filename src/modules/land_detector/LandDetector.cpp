@@ -58,11 +58,15 @@ LandDetector::~LandDetector()
 void LandDetector::start()
 {
 	_update_params();
-	ScheduleOnInterval(LAND_DETECTOR_UPDATE_INTERVAL);
+	ScheduleDelayed(20_ms);
+	_vehicle_local_position_sub.registerCallback();
 }
 
 void LandDetector::Run()
 {
+	// push backup schedule
+	ScheduleDelayed(20_ms);
+
 	perf_begin(_cycle_perf);
 
 	if (_parameter_update_sub.updated()) {
