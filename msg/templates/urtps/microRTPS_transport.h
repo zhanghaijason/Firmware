@@ -33,9 +33,14 @@
 
 #pragma once
 
-#include <cstring>
 #include <arpa/inet.h>
+#include <cstring>
 #include <poll.h>
+#if !defined (__PX4_NUTTX)
+#include <atomic>
+#else
+#include <px4_platform_common/atomic.h>
+#endif
 #include <termios.h>
 
 #define BUFFER_SIZE 2048
@@ -78,6 +83,11 @@ protected:
 protected:
 	uint32_t rx_buff_pos;
 	char rx_buffer[BUFFER_SIZE] = {};
+#if !defined (__PX4_NUTTX)
+	std::atomic<uint8_t> _seq_number{0};
+#else
+	px4::atomic<uint8_t> _seq_number{0};
+#endif
 
 private:
 	struct __attribute__((packed)) Header {
