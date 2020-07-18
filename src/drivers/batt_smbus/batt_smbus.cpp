@@ -1,6 +1,6 @@
 /****************************************************************************
  *
- *   Copyright (c) 2012-2018 PX4 Development Team. All rights reserved.
+ *   Copyright (c) 2012-2020 PX4 Development Team. All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -39,6 +39,7 @@
  *
  * @author Jacob Dahl <dahl.jakejacob@gmail.com>
  * @author Alex Klimaj <alexklimaj@gmail.com>
+ * @author Bazooka Joe <BazookaJoe1900@gmail.com>
  */
 
 #include "batt_smbus.h"
@@ -83,9 +84,6 @@ BATT_SMBUS::~BATT_SMBUS()
 
 void BATT_SMBUS::RunImpl()
 {
-	// Get the current time.
-	uint64_t now = hrt_absolute_time();
-
 	// Read data from sensor.
 	battery_status_s new_report = {};
 
@@ -93,7 +91,7 @@ void BATT_SMBUS::RunImpl()
 	new_report.id = 1;
 
 	// Set time of reading.
-	new_report.timestamp = now;
+	new_report.timestamp = hrt_absolute_time();
 
 	new_report.connected = true;
 
@@ -208,19 +206,19 @@ int BATT_SMBUS::get_cell_voltages()
 	// Temporary variable for storing SMBUS reads.
 	uint16_t result = 0;
 
-	int ret = _interface->read_word(BATT_SMBUS_CELL_1_VOLTAGE, result);
+	int ret = _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_1_VOLTAGE, result);
 	// Convert millivolts to volts.
 	_cell_voltages[0] = ((float)result) / 1000.0f;
 
-	ret = _interface->read_word(BATT_SMBUS_CELL_2_VOLTAGE, result);
+	ret = _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_2_VOLTAGE, result);
 	// Convert millivolts to volts.
 	_cell_voltages[1] = ((float)result) / 1000.0f;
 
-	ret = _interface->read_word(BATT_SMBUS_CELL_3_VOLTAGE, result);
+	ret = _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_3_VOLTAGE, result);
 	// Convert millivolts to volts.
 	_cell_voltages[2] = ((float)result) / 1000.0f;
 
-	ret = _interface->read_word(BATT_SMBUS_CELL_4_VOLTAGE, result);
+	ret = _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_4_VOLTAGE, result);
 	// Convert millivolts to volts.
 	_cell_voltages[3] = ((float)result) / 1000.0f;
 
@@ -283,15 +281,15 @@ int BATT_SMBUS::dataflash_read(uint16_t &address, void *data, const unsigned len
 {
 	uint8_t code = BATT_SMBUS_MANUFACTURER_BLOCK_ACCESS;
 
-	int result = _interface->block_write(code, &address, 2, true);
+	int ret = _interface->block_write(code, &address, 2, true);
 
-	if (result != PX4_OK) {
-		return result;
+	if (ret != PX4_OK) {
+		return ret;
 	}
 
-	result = _interface->block_read(code, data, length, true);
+	ret = _interface->block_read(code, data, length, true);
 
-	return result;
+	return ret;
 }
 
 int BATT_SMBUS::dataflash_write(uint16_t address, void *data, const unsigned length)
@@ -310,50 +308,50 @@ int BATT_SMBUS::dataflash_write(uint16_t address, void *data, const unsigned len
 	memcpy(&tx_buf[2], data, length);
 
 	// code (1), byte_count (1), addr(2), data(32) + pec
-	int result = _interface->block_write(code, tx_buf, length + 2, false);
+	int ret = _interface->block_write(code, tx_buf, length + 2, false);
 
-	return result;
+	return ret;
 }
 
 int BATT_SMBUS::get_startup_info()
 {
-	int result = 0;
+	int ret;
 
 	// The name field is 21 characters, add one for null terminator.
 	const unsigned name_length = 22;
 
 	// Read battery threshold params on startup.
-	param_get(param_find("BAT_CRIT_THR"), &_crit_thr);
-	param_get(param_find("BAT_LOW_THR"), &_low_thr);
-	param_get(param_find("BAT_EMERGEN_THR"), &_emergency_thr);
-	param_get(param_find("BAT_C_MULT"), &_c_mult);
+	param_get((param_t)(px4::params::BAT_CRIT_THR), &_crit_thr);
+	param_get((param_t)(px4::params::BAT_LOW_THR), &_low_thr);
+	param_get((param_t)(px4::params::BAT_EMERGEN_THR), &_emergency_thr);
+	param_get((param_t)(px4::params::BAT_C_MULT), &_c_mult);
 
 	// Try and get battery SBS info.
 	if (_manufacturer_name == nullptr) {
 		char man_name[name_length] = {};
-		result = manufacturer_name((uint8_t *)man_name, sizeof(man_name));
+		ret = manufacturer_name((uint8_t *)man_name, sizeof(man_name));
 
-		if (result != PX4_OK) {
+		if (ret != PX4_OK) {
 			PX4_DEBUG("Failed to get manufacturer name");
-			return PX4_ERROR;
+			return ret;
 		}
 
 		_manufacturer_name = new char[sizeof(man_name)];
 	}
 
 	uint16_t serial_num;
-	result = _interface->read_word(BATT_SMBUS_SERIAL_NUMBER, serial_num);
+	ret = _interface->read_word(BATT_SMBUS_SERIAL_NUMBER, serial_num);
 
 	uint16_t remaining_cap;
-	result |= _interface->read_word(BATT_SMBUS_REMAINING_CAPACITY, remaining_cap);
+	ret |= _interface->read_word(BATT_SMBUS_REMAINING_CAPACITY, remaining_cap);
 
 	uint16_t cycle_count;
-	result |= _interface->read_word(BATT_SMBUS_CYCLE_COUNT, cycle_count);
+	ret |= _interface->read_word(BATT_SMBUS_CYCLE_COUNT, cycle_count);
 
 	uint16_t full_cap;
-	result |= _interface->read_word(BATT_SMBUS_FULL_CHARGE_CAPACITY, full_cap);
+	ret |= _interface->read_word(BATT_SMBUS_FULL_CHARGE_CAPACITY, full_cap);
 
-	if (!result) {
+	if (!ret) {
 		_serial_number = serial_num;
 		_batt_startup_capacity = (uint16_t)((float)remaining_cap * _c_mult);
 		_cycle_count = cycle_count;
@@ -362,7 +360,7 @@ int BATT_SMBUS::get_startup_info()
 
 	if (lifetime_data_flush() == PX4_OK) {
 		// Flush needs time to complete, otherwise device is busy. 100ms not enough, 200ms works.
-		px4_usleep(200000);
+		px4_usleep(200_ms);
 
 		if (lifetime_read_block_one() == PX4_OK) {
 			if (_lifetime_max_delta_cell_voltage > BATT_CELL_VOLTAGE_THRESHOLD_FAILED) {
@@ -375,45 +373,33 @@ int BATT_SMBUS::get_startup_info()
 		PX4_WARN("Failed to flush lifetime data");
 	}
 
-	return result;
+	return ret;
 }
 
-uint16_t BATT_SMBUS::get_serial_number()
+int BATT_SMBUS::get_serial_number(uint16_t &serial_num)
 {
-	uint16_t serial_num = 0;
-
-	if (_interface->read_word(BATT_SMBUS_SERIAL_NUMBER, serial_num) == PX4_OK) {
-		return serial_num;
-	}
-
-	return PX4_ERROR;
+	return _interface->read_word(BATT_SMBUS_SERIAL_NUMBER, serial_num);
 }
 
-int BATT_SMBUS::manufacture_date()
+int BATT_SMBUS::manufacture_date(uint16_t &manufacture_date)
 {
-	uint16_t date;
-	int result = _interface->read_word(BATT_SMBUS_MANUFACTURE_DATE, date);
-
-	if (result != PX4_OK) {
-		return result;
-	}
-
-	return date;
+	return _interface->read_word(BATT_SMBUS_MANUFACTURE_DATE, manufacture_date);
 }
 
 int BATT_SMBUS::manufacturer_name(uint8_t *man_name, const uint8_t length)
 {
+	//TODO: fix length issues, if length < BATT_SMBUS_MANUFACTURER_NAME_SIZE?s
 	uint8_t code = BATT_SMBUS_MANUFACTURER_NAME;
-	uint8_t rx_buf[21] = {};
+	uint8_t rx_buf[BATT_SMBUS_MANUFACTURER_NAME_SIZE] = {};
 
 	// Returns 21 bytes, add 1 byte for null terminator.
-	int result = _interface->block_read(code, rx_buf, length - 1, true);
+	int ret = _interface->block_read(code, rx_buf, length - 1, true);
 
 	memcpy(man_name, rx_buf, sizeof(rx_buf));
 
-	man_name[21] = '\0';
+	man_name[BATT_SMBUS_MANUFACTURER_NAME_SIZE] = '\0';
 
-	return result;
+	return ret;
 }
 
 int BATT_SMBUS::manufacturer_read(const uint16_t cmd_code, void *data, const unsigned length)
@@ -424,36 +410,33 @@ int BATT_SMBUS::manufacturer_read(const uint16_t cmd_code, void *data, const uns
 	address[0] = ((uint8_t *)&cmd_code)[0];
 	address[1] = ((uint8_t *)&cmd_code)[1];
 
-	int result = _interface->block_write(code, address, 2, false);
+	int ret = _interface->block_write(code, address, 2, false);
 
-	if (result != PX4_OK) {
-		return result;
+	if (ret != PX4_OK) {
+		return ret;
 	}
 
-	result = _interface->block_read(code, data, length, true);
+	ret = _interface->block_read(code, data, length, true);
 	memmove(data, &((uint8_t *)data)[2], length - 2); // remove the address bytes
 
-	return result;
+	return ret;
 }
 
 int BATT_SMBUS::manufacturer_write(const uint16_t cmd_code, void *data, const unsigned length)
 {
 	uint8_t code = BATT_SMBUS_MANUFACTURER_BLOCK_ACCESS;
 
-	uint8_t address[2] = {};
-	address[0] = ((uint8_t *)&cmd_code)[0];
-	address[1] = ((uint8_t *)&cmd_code)[1];
-
 	uint8_t tx_buf[MAC_DATA_BUFFER_SIZE + 2] = {};
-	memcpy(tx_buf, address, 2);
+	tx_buf[0] = cmd_code & 0xff;
+	tx_buf[1] = (cmd_code >> 8) & 0xff;
 
-	if (data != nullptr) {
+	if (data != nullptr && length <= MAC_DATA_BUFFER_SIZE) {
 		memcpy(&tx_buf[2], data, length);
 	}
 
-	int result = _interface->block_write(code, tx_buf, length + 2, false);
+	int ret = _interface->block_write(code, tx_buf, length + 2, false);
 
-	return result;
+	return ret;
 }
 
 int BATT_SMBUS::unseal()
@@ -471,24 +454,19 @@ int BATT_SMBUS::unseal()
 int BATT_SMBUS::seal()
 {
 	// See bq40z50 technical reference.
-	uint16_t reg = BATT_SMBUS_SEAL;
-
-	return manufacturer_write(reg, nullptr, 0);
+	return manufacturer_write(BATT_SMBUS_SEAL, nullptr, 0);
 }
 
 int BATT_SMBUS::lifetime_data_flush()
 {
-	uint16_t flush = BATT_SMBUS_LIFETIME_FLUSH;
-
-	return manufacturer_write(flush, nullptr, 0);
+	return manufacturer_write(BATT_SMBUS_LIFETIME_FLUSH, nullptr, 0);
 }
 
 int BATT_SMBUS::lifetime_read_block_one()
 {
-	const int buffer_size = 32 + 2; // 32 bytes of data and 2 bytes of address
-	uint8_t lifetime_block_one[buffer_size] = {};
+	uint8_t lifetime_block_one[32 + 2] = {}; // 32 bytes of data and 2 bytes of address
 
-	if (PX4_OK != manufacturer_read(BATT_SMBUS_LIFETIME_BLOCK_ONE, lifetime_block_one, buffer_size)) {
+	if (PX4_OK != manufacturer_read(BATT_SMBUS_LIFETIME_BLOCK_ONE, lifetime_block_one, sizeof(lifetime_block_one))) {
 		PX4_INFO("Failed to read lifetime block 1.");
 		return PX4_ERROR;
 	}
@@ -548,9 +526,9 @@ I2CSPIDriverBase *BATT_SMBUS::instantiate(const BusCLIArguments &cli, const BusI
 		return nullptr;
 	}
 
-	int result = instance->get_startup_info();
+	int ret = instance->get_startup_info();
 
-	if (result != PX4_OK) {
+	if (ret != PX4_OK) {
 		delete instance;
 		return nullptr;
 	}
@@ -566,14 +544,16 @@ BATT_SMBUS::custom_method(const BusCLIArguments &cli)
 	switch(cli.custom1) {
 		case 1: {
 			uint8_t man_name[22];
-			int result = manufacturer_name(man_name, sizeof(man_name));
+			uint16_t manufacture_date_value;
+			uint16_t serial_num;
+
+			int ret = manufacturer_name(man_name, sizeof(man_name));
 			PX4_INFO("The manufacturer name: %s", man_name);
 
-			result = manufacture_date();
-			PX4_INFO("The manufacturer date: %d", result);
+			ret |= manufacture_date(manufacture_date_value);
+			PX4_INFO("The manufacturer date: %d", manufacture_date_value);
 
-			uint16_t serial_num = 0;
-			serial_num = get_serial_number();
+			ret |= get_serial_number(serial_num);
 			PX4_INFO("The serial number: %d", serial_num);
 		}
 			break;
@@ -598,7 +578,7 @@ BATT_SMBUS::custom_method(const BusCLIArguments &cli)
 				if (PX4_OK != dataflash_write(address, tx_buf+1, length)) {
 					PX4_ERR("Dataflash write failed: %d", address);
 				}
-				px4_usleep(100000);
+				px4_usleep(100_ms);
 			}
 			break;
 	}

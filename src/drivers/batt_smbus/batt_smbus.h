@@ -48,11 +48,16 @@
 #include <mathlib/mathlib.h>
 #include <perf/perf_counter.h>
 #include <px4_platform_common/module.h>
+#include <px4_platform_common/param.h>
 #include <px4_platform_common/getopt.h>
 #include <px4_platform_common/i2c_spi_buses.h>
 #include <uORB/topics/battery_status.h>
 
 #include <board_config.h>
+
+using namespace time_literals;
+
+#define BATT_SMBUS_MEASUREMENT_INTERVAL_US              100_ms         ///< time in microseconds, measure at 4Hz
 
 #define MAC_DATA_BUFFER_SIZE                            32
 
@@ -64,36 +69,50 @@
 
 #define BATT_SMBUS_ADDR                                 0x0B            ///< Default 7 bit address I2C address. 8 bit = 0x16
 
-#define BATT_SMBUS_CURRENT                              0x0A            ///< current register
-#define BATT_SMBUS_AVERAGE_CURRENT                      0x0B            ///< average current register
-#define BATT_SMBUS_MAX_ERROR				0x0C		///< max error
-#define BATT_SMBUS_RELATIVE_SOC				0x0D		///< Relative State Of Charge
 #define BATT_SMBUS_TEMP                                 0x08            ///< temperature register
 #define BATT_SMBUS_VOLTAGE                              0x09            ///< voltage register
+#define BATT_SMBUS_CURRENT                              0x0A            ///< current register
+#define BATT_SMBUS_AVERAGE_CURRENT                      0x0B            ///< average current register
+#define BATT_SMBUS_MAX_ERROR                            0x0C            ///< max error
+#define BATT_SMBUS_RELATIVE_SOC                         0x0D            ///< Relative State Of Charge
+#define BATT_SMBUS_ABSOLUTE_SOC                         0x0E            ///< Absolute State of charge
+#define BATT_SMBUS_REMAINING_CAPACITY                   0x0F            ///< predicted remaining battery capacity as a percentage
 #define BATT_SMBUS_FULL_CHARGE_CAPACITY                 0x10            ///< capacity when fully charged
 #define BATT_SMBUS_RUN_TIME_TO_EMPTY                    0x11            ///< predicted remaining battery capacity based on the present rate of discharge in min
 #define BATT_SMBUS_AVERAGE_TIME_TO_EMPTY                0x12            ///< predicted remaining battery capacity based on the present rate of discharge in min
-#define BATT_SMBUS_REMAINING_CAPACITY                   0x0F            ///< predicted remaining battery capacity as a percentage
 #define BATT_SMBUS_CYCLE_COUNT                          0x17            ///< number of cycles the battery has experienced
 #define BATT_SMBUS_DESIGN_CAPACITY                      0x18            ///< design capacity register
 #define BATT_SMBUS_DESIGN_VOLTAGE                       0x19            ///< design voltage register
 #define BATT_SMBUS_MANUFACTURER_NAME                    0x20            ///< manufacturer name
+#define BATT_SMBUS_MANUFACTURER_NAME_SIZE               21              ///< manufacturer name data size
 #define BATT_SMBUS_MANUFACTURE_DATE                     0x1B            ///< manufacture date register
 #define BATT_SMBUS_SERIAL_NUMBER                        0x1C            ///< serial number register
-#define BATT_SMBUS_MEASUREMENT_INTERVAL_US              100000          ///< time in microseconds, measure at 10Hz
+
+#define BATT_SMBUS_BQ40Z50_CELL_4_VOLTAGE               0x3C
+#define BATT_SMBUS_BQ40Z50_CELL_3_VOLTAGE               0x3D
+#define BATT_SMBUS_BQ40Z50_CELL_2_VOLTAGE               0x3E
+#define BATT_SMBUS_BQ40Z50_CELL_1_VOLTAGE               0x3F
+
+#define BATT_SMBUS_BQ40Z80_CELL_7_VOLTAGE               0x3C
+#define BATT_SMBUS_BQ40Z80_CELL_6_VOLTAGE               0x3D
+#define BATT_SMBUS_BQ40Z80_CELL_5_VOLTAGE               0x3E
+#define BATT_SMBUS_BQ40Z80_CELL_4_VOLTAGE               0x3F
+
+#define BATT_SMBUS_STATE_OF_HEALTH                      0x4F            ///< State of Health. The SOH information of the battery in percentage of Design Capacity
+
 #define BATT_SMBUS_MANUFACTURER_ACCESS                  0x00
 #define BATT_SMBUS_MANUFACTURER_DATA                    0x23
 #define BATT_SMBUS_MANUFACTURER_BLOCK_ACCESS            0x44
-#define BATT_SMBUS_STATE_OF_HEALTH			0x4F		///< State of Health. The SOH information of the battery in percentage of Design Capacity
+
 #define BATT_SMBUS_SECURITY_KEYS                        0x0035
-#define BATT_SMBUS_CELL_1_VOLTAGE                       0x3F
-#define BATT_SMBUS_CELL_2_VOLTAGE                       0x3E
-#define BATT_SMBUS_CELL_3_VOLTAGE                       0x3D
-#define BATT_SMBUS_CELL_4_VOLTAGE                       0x3C
+
 #define BATT_SMBUS_LIFETIME_FLUSH                       0x002E
 #define BATT_SMBUS_LIFETIME_BLOCK_ONE                   0x0060
 #define BATT_SMBUS_ENABLED_PROTECTIONS_A_ADDRESS        0x4938
 #define BATT_SMBUS_SEAL                                 0x0030
+#define BATT_SMBUS_DASTATUS1                            0x0071
+#define BATT_SMBUS_DASTATUS2                            0x0072
+#define BATT_SMBUS_DASTATUS3                            0x007B
 
 #define BATT_SMBUS_ENABLED_PROTECTIONS_A_DEFAULT        0xcf
 #define BATT_SMBUS_ENABLED_PROTECTIONS_A_CUV_DISABLED   0xce
@@ -134,9 +153,10 @@ public:
 
 	/**
 	 * @brief Returns the SBS serial number of the battery device.
-	 * @return Returns the SBS serial number of the battery device.
+	 * @param serial_num The address to set the serial number
+	 * @return Returns PX4_OK on success, PX4_ERROR on failure.
 	 */
-	uint16_t get_serial_number();
+	int get_serial_number(uint16_t &serial_num);
 
 	/**
 	* @brief Read info from battery on startup.
@@ -146,9 +166,10 @@ public:
 
 	/**
 	 * @brief Gets the SBS manufacture date of the battery.
+	 * @param manufacture_date The address to set the manufacture_date number
 	 * @return Returns PX4_OK on success, PX4_ERROR on failure.
 	 */
-	int manufacture_date();
+	int manufacture_date(uint16_t &manufacture_date);
 
 	/**
 	 * @brief Gets the SBS manufacturer name of the battery device.
