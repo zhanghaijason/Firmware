@@ -56,7 +56,7 @@ BATT_SMBUS::BATT_SMBUS(I2CSPIBusOption bus_option, const int bus, SMBus *interfa
 	_batt_topic = orb_advertise(ORB_ID(battery_status), &new_report);
 
 	int battsource = 1;
-	param_set(param_find("BAT_SOURCE"), &battsource);
+	param_set((param_t)(px4::params::BAT_SOURCE), &battsource);
 
 	_interface->init();
 	// unseal() here to allow an external config script to write to protected flash.
@@ -70,16 +70,12 @@ BATT_SMBUS::~BATT_SMBUS()
 	orb_unadvertise(_batt_topic);
 	perf_free(_cycle);
 
-	if (_manufacturer_name != nullptr) {
-		delete[] _manufacturer_name;
-	}
-
 	if (_interface != nullptr) {
 		delete _interface;
 	}
 
 	int battsource = 0;
-	param_set(param_find("BAT_SOURCE"), &battsource);
+	param_set((param_t)(px4::params::BAT_SOURCE), &battsource);
 }
 
 void BATT_SMBUS::RunImpl()
@@ -135,7 +131,7 @@ void BATT_SMBUS::RunImpl()
 	ret |= _interface->read_word(BATT_SMBUS_REMAINING_CAPACITY, result);
 
 	// Calculate total discharged amount in mah.
-	new_report.discharged_mah = _batt_capacity - (float)result * _c_mult;
+	new_report.discharged_mah = _batt_startup_capacity - (float)result * _c_mult;
 
 	// Read Relative SOC.
 	ret |= _interface->read_word(BATT_SMBUS_RELATIVE_SOC, result);
@@ -143,48 +139,49 @@ void BATT_SMBUS::RunImpl()
 	// Normalize 0.0 to 1.0
 	new_report.remaining = (float)result / 100.0f;
 
+	// Read Max Error
+	ret |= _interface->read_word(BATT_SMBUS_MAX_ERROR, result);
+	new_report.max_error = result;
+
+
 	// Read SOH
 	// TODO(hyonlim): this value can be used for battery_status.warning mavlink message.
 	ret |= _interface->read_word(BATT_SMBUS_STATE_OF_HEALTH, result);
 	new_report.state_of_health = result;
 
-	// Read Max Error
-	ret |= _interface->read_word(BATT_SMBUS_MAX_ERROR, result);
-	new_report.max_error = result;
-
-	// Check if max lifetime voltage delta is greater than allowed.
-	if (_lifetime_max_delta_cell_voltage > BATT_CELL_VOLTAGE_THRESHOLD_FAILED) {
-		new_report.warning = battery_status_s::BATTERY_WARNING_CRITICAL;
-
-	} else if (new_report.remaining > _low_thr) {
-		new_report.warning = battery_status_s::BATTERY_WARNING_NONE;
-
-	} else if (new_report.remaining > _crit_thr) {
-		new_report.warning = battery_status_s::BATTERY_WARNING_LOW;
-
-	} else if (new_report.remaining > _emergency_thr) {
-		new_report.warning = battery_status_s::BATTERY_WARNING_CRITICAL;
-
-	} else {
-		new_report.warning = battery_status_s::BATTERY_WARNING_EMERGENCY;
-	}
-
 	// Read battery temperature and covert to Celsius.
 	ret |= _interface->read_word(BATT_SMBUS_TEMP, result);
 	new_report.temperature = ((float)result / 10.0f) + CONSTANTS_ABSOLUTE_NULL_CELSIUS;
 
-	new_report.capacity = _batt_capacity;
-	new_report.cycle_count = _cycle_count;
-	new_report.serial_number = _serial_number;
-	new_report.max_cell_voltage_delta = _max_cell_voltage_delta;
-	new_report.cell_count = _cell_count;
-	new_report.voltage_cell_v[0] = _cell_voltages[0];
-	new_report.voltage_cell_v[1] = _cell_voltages[1];
-	new_report.voltage_cell_v[2] = _cell_voltages[2];
-	new_report.voltage_cell_v[3] = _cell_voltages[3];
-
 	// Only publish if no errors.
-	if (!ret) {
+	if (ret == PX4_OK) {
+		new_report.capacity = _batt_capacity;
+		new_report.cycle_count = _cycle_count;
+		new_report.serial_number = _serial_number;
+		new_report.max_cell_voltage_delta = _max_cell_voltage_delta;
+		new_report.cell_count = _cell_count;
+		new_report.voltage_cell_v[0] = _cell_voltages[0];
+		new_report.voltage_cell_v[1] = _cell_voltages[1];
+		new_report.voltage_cell_v[2] = _cell_voltages[2];
+		new_report.voltage_cell_v[3] = _cell_voltages[3];
+
+		// Check if max lifetime voltage delta is greater than allowed.
+		if (_lifetime_max_delta_cell_voltage > BATT_CELL_VOLTAGE_THRESHOLD_FAILED) {
+			new_report.warning = battery_status_s::BATTERY_WARNING_CRITICAL;
+
+		} else if (new_report.remaining > _low_thr) {
+			new_report.warning = battery_status_s::BATTERY_WARNING_NONE;
+
+		} else if (new_report.remaining > _crit_thr) {
+			new_report.warning = battery_status_s::BATTERY_WARNING_LOW;
+
+		} else if (new_report.remaining > _emergency_thr) {
+			new_report.warning = battery_status_s::BATTERY_WARNING_CRITICAL;
+
+		} else {
+			new_report.warning = battery_status_s::BATTERY_WARNING_EMERGENCY;
+		}
+
 		orb_publish(ORB_ID(battery_status), _batt_topic, &new_report);
 
 		_last_report = new_report;
@@ -210,15 +207,15 @@ int BATT_SMBUS::get_cell_voltages()
 	// Convert millivolts to volts.
 	_cell_voltages[0] = ((float)result) / 1000.0f;
 
-	ret = _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_2_VOLTAGE, result);
+	ret |= _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_2_VOLTAGE, result);
 	// Convert millivolts to volts.
 	_cell_voltages[1] = ((float)result) / 1000.0f;
 
-	ret = _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_3_VOLTAGE, result);
+	ret |= _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_3_VOLTAGE, result);
 	// Convert millivolts to volts.
 	_cell_voltages[2] = ((float)result) / 1000.0f;
 
-	ret = _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_4_VOLTAGE, result);
+	ret |= _interface->read_word(BATT_SMBUS_BQ40Z50_CELL_4_VOLTAGE, result);
 	// Convert millivolts to volts.
 	_cell_voltages[3] = ((float)result) / 1000.0f;
 
@@ -226,7 +223,7 @@ int BATT_SMBUS::get_cell_voltages()
 	_min_cell_voltage = _cell_voltages[0];
 	float max_cell_voltage = _cell_voltages[0];
 
-	for (uint8_t i = 1; i < (sizeof(_cell_voltages) / sizeof(_cell_voltages[0])); i++) {
+	for (uint8_t i = 1; (i < _cell_count && i < (sizeof(_cell_voltages) / sizeof(_cell_voltages[0]))); i++) {
 		_min_cell_voltage = math::min(_min_cell_voltage, _cell_voltages[i]);
 		max_cell_voltage = math::max(max_cell_voltage, _cell_voltages[i]);
 	}
@@ -277,7 +274,7 @@ void BATT_SMBUS::set_undervoltage_protection(float average_current)
 }
 
 //@NOTE: Currently unused, could be helpful for debugging a parameter set though.
-int BATT_SMBUS::dataflash_read(uint16_t &address, void *data, const unsigned length)
+int BATT_SMBUS::dataflash_read(const uint16_t address, void *data, const unsigned length)
 {
 	uint8_t code = BATT_SMBUS_MANUFACTURER_BLOCK_ACCESS;
 
@@ -292,14 +289,14 @@ int BATT_SMBUS::dataflash_read(uint16_t &address, void *data, const unsigned len
 	return ret;
 }
 
-int BATT_SMBUS::dataflash_write(uint16_t address, void *data, const unsigned length)
+int BATT_SMBUS::dataflash_write(const uint16_t address, void *data, const unsigned length)
 {
 	uint8_t code = BATT_SMBUS_MANUFACTURER_BLOCK_ACCESS;
 
 	uint8_t tx_buf[MAC_DATA_BUFFER_SIZE + 2] = {};
 
-	tx_buf[0] = ((uint8_t *)&address)[0];
-	tx_buf[1] = ((uint8_t *)&address)[1];
+	tx_buf[0] = address & 0xff;
+	tx_buf[1] = (address >> 8) & 0xff;
 
 	if (length > MAC_DATA_BUFFER_SIZE) {
 		return PX4_ERROR;
@@ -315,10 +312,7 @@ int BATT_SMBUS::dataflash_write(uint16_t address, void *data, const unsigned len
 
 int BATT_SMBUS::get_startup_info()
 {
-	int ret;
-
-	// The name field is 21 characters, add one for null terminator.
-	const unsigned name_length = 22;
+	int ret = PX4_OK;
 
 	// Read battery threshold params on startup.
 	param_get((param_t)(px4::params::BAT_CRIT_THR), &_crit_thr);
@@ -326,21 +320,16 @@ int BATT_SMBUS::get_startup_info()
 	param_get((param_t)(px4::params::BAT_EMERGEN_THR), &_emergency_thr);
 	param_get((param_t)(px4::params::BAT_C_MULT), &_c_mult);
 
-	// Try and get battery SBS info.
-	if (_manufacturer_name == nullptr) {
-		char man_name[name_length] = {};
-		ret = manufacturer_name((uint8_t *)man_name, sizeof(man_name));
+	int32_t cell_count_param;
+	param_get((param_t)(px4::params::BAT_N_CELLS), &cell_count_param);
+	_cell_count = (uint8_t)cell_count_param;
 
-		if (ret != PX4_OK) {
-			PX4_DEBUG("Failed to get manufacturer name");
-			return ret;
-		}
-
-		_manufacturer_name = new char[sizeof(man_name)];
-	}
+	ret |= _interface->block_read(BATT_SMBUS_MANUFACTURER_NAME, _manufacturer_name, BATT_SMBUS_MANUFACTURER_NAME_SIZE,
+				      true);
+	_manufacturer_name[sizeof(_manufacturer_name) - 1] = '\0';
 
 	uint16_t serial_num;
-	ret = _interface->read_word(BATT_SMBUS_SERIAL_NUMBER, serial_num);
+	ret |= _interface->read_word(BATT_SMBUS_SERIAL_NUMBER, serial_num);
 
 	uint16_t remaining_cap;
 	ret |= _interface->read_word(BATT_SMBUS_REMAINING_CAPACITY, remaining_cap);
@@ -351,11 +340,15 @@ int BATT_SMBUS::get_startup_info()
 	uint16_t full_cap;
 	ret |= _interface->read_word(BATT_SMBUS_FULL_CHARGE_CAPACITY, full_cap);
 
+	uint16_t manufacture_date;
+	ret |= _interface->read_word(BATT_SMBUS_MANUFACTURE_DATE, manufacture_date);
+
 	if (!ret) {
 		_serial_number = serial_num;
 		_batt_startup_capacity = (uint16_t)((float)remaining_cap * _c_mult);
 		_cycle_count = cycle_count;
 		_batt_capacity = (uint16_t)((float)full_cap * _c_mult);
+		_manufacture_date = manufacture_date;
 	}
 
 	if (lifetime_data_flush() == PX4_OK) {
@@ -372,32 +365,6 @@ int BATT_SMBUS::get_startup_info()
 	} else {
 		PX4_WARN("Failed to flush lifetime data");
 	}
-
-	return ret;
-}
-
-int BATT_SMBUS::get_serial_number(uint16_t &serial_num)
-{
-	return _interface->read_word(BATT_SMBUS_SERIAL_NUMBER, serial_num);
-}
-
-int BATT_SMBUS::manufacture_date(uint16_t &manufacture_date)
-{
-	return _interface->read_word(BATT_SMBUS_MANUFACTURE_DATE, manufacture_date);
-}
-
-int BATT_SMBUS::manufacturer_name(uint8_t *man_name, const uint8_t length)
-{
-	//TODO: fix length issues, if length < BATT_SMBUS_MANUFACTURER_NAME_SIZE?s
-	uint8_t code = BATT_SMBUS_MANUFACTURER_NAME;
-	uint8_t rx_buf[BATT_SMBUS_MANUFACTURER_NAME_SIZE] = {};
-
-	// Returns 21 bytes, add 1 byte for null terminator.
-	int ret = _interface->block_read(code, rx_buf, length - 1, true);
-
-	memcpy(man_name, rx_buf, sizeof(rx_buf));
-
-	man_name[BATT_SMBUS_MANUFACTURER_NAME_SIZE] = '\0';
 
 	return ret;
 }
@@ -543,18 +510,9 @@ BATT_SMBUS::custom_method(const BusCLIArguments &cli)
 {
 	switch(cli.custom1) {
 		case 1: {
-			uint8_t man_name[22];
-			uint16_t manufacture_date_value;
-			uint16_t serial_num;
-
-			int ret = manufacturer_name(man_name, sizeof(man_name));
-			PX4_INFO("The manufacturer name: %s", man_name);
-
-			ret |= manufacture_date(manufacture_date_value);
-			PX4_INFO("The manufacturer date: %d", manufacture_date_value);
-
-			ret |= get_serial_number(serial_num);
-			PX4_INFO("The serial number: %d", serial_num);
+			PX4_INFO("The manufacturer name: %s", _manufacturer_name);
+			PX4_INFO("The manufacturer date: %d", _manufacture_date);
+			PX4_INFO("The serial number: %d", _serial_number);
 		}
 			break;
 		case 2:

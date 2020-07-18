@@ -39,6 +39,7 @@
  *
  * @author Jacob Dahl <dahl.jakejacob@gmail.com>
  * @author Alex Klimaj <alexklimaj@gmail.com>
+ * @author Bazooka Joe <BazookaJoe1900@gmail.com>
  */
 
 #pragma once
@@ -140,7 +141,7 @@ public:
 	 * @param data The returned data.
 	 * @return Returns PX4_OK on success, PX4_ERROR on failure.
 	 */
-	int dataflash_read(uint16_t &address, void *data, const unsigned length);
+	int dataflash_read(const uint16_t address, void *data, const unsigned length);
 
 	/**
 	 * @brief Writes data to flash.
@@ -149,36 +150,13 @@ public:
 	 * @param length The number of bytes being written.
 	 * @return Returns PX4_OK on success, PX4_ERROR on failure.
 	 */
-	int dataflash_write(uint16_t address, void *data, const unsigned length);
-
-	/**
-	 * @brief Returns the SBS serial number of the battery device.
-	 * @param serial_num The address to set the serial number
-	 * @return Returns PX4_OK on success, PX4_ERROR on failure.
-	 */
-	int get_serial_number(uint16_t &serial_num);
+	int dataflash_write(const uint16_t address, void *data, const unsigned length);
 
 	/**
 	* @brief Read info from battery on startup.
 	* @return Returns PX4_OK on success, PX4_ERROR on failure.
 	*/
 	int get_startup_info();
-
-	/**
-	 * @brief Gets the SBS manufacture date of the battery.
-	 * @param manufacture_date The address to set the manufacture_date number
-	 * @return Returns PX4_OK on success, PX4_ERROR on failure.
-	 */
-	int manufacture_date(uint16_t &manufacture_date);
-
-	/**
-	 * @brief Gets the SBS manufacturer name of the battery device.
-	 * @param manufacturer_name Pointer to a buffer into which the manufacturer name is to be written.
-	 * @param max_length The maximum number of bytes to attempt to read from the manufacturer name register,
-	 *                   including the null character that is appended to the end.
-	 * @return Returns PX4_OK on success, PX4_ERROR on failure.
-	 */
-	int manufacturer_name(uint8_t *manufacturer_name, const uint8_t length);
 
 	/**
 	 * @brief Performs a ManufacturerBlockAccess() read command.
@@ -243,7 +221,8 @@ private:
 
 	perf_counter_t _cycle{perf_alloc(PC_ELAPSED, "batt_smbus_cycle")};
 
-	float _cell_voltages[4] {};
+	static const uint8_t MAX_NUM_OF_CELLS = 7;
+	float _cell_voltages[MAX_NUM_OF_CELLS] {};
 
 	float _max_cell_voltage_delta{0};
 
@@ -256,7 +235,7 @@ private:
 	orb_advert_t _batt_topic{nullptr};
 
 	/** @param _cell_count Number of series cell. */
-	uint8_t _cell_count{4};
+	uint8_t _cell_count{0};
 
 	/** @param _batt_capacity Battery design capacity in mAh (0 means unknown). */
 	uint16_t _batt_capacity{0};
@@ -283,7 +262,10 @@ private:
 	float _c_mult{0.f};
 
 	/** @param _manufacturer_name Name of the battery manufacturer. */
-	char *_manufacturer_name{nullptr};
+
+	char _manufacturer_name[BATT_SMBUS_MANUFACTURER_NAME_SIZE + 1] {};	// Plus one for terminator
+
+	uint16_t _manufacture_date{0};
 
 	/** @param _lifetime_max_delta_cell_voltage Max lifetime delta of the battery cells */
 	float _lifetime_max_delta_cell_voltage{0.f};
