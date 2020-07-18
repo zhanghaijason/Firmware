@@ -267,6 +267,7 @@ int main(int argc, char** argv)
     bool receiving = false;
     uint8_t topic_ID = 255;
     std::chrono::time_point<std::chrono::steady_clock> start, end;
+    std::mutex rcv_mutex;
 @[end if]@
 
     topics.set_timesync(timeSync);
@@ -286,6 +287,7 @@ int main(int argc, char** argv)
         ++loop;
         if (!receiving) start = std::chrono::steady_clock::now();
         // Publish messages received from UART
+        std::unique_lock<std::mutex> lk(rcv_mutex);
         while (0 < (length = transport_node->read(&topic_ID, data_buffer, BUFFER_SIZE)))
         {
             topics.publish(topic_ID, data_buffer, sizeof(data_buffer));
@@ -294,13 +296,14 @@ int main(int argc, char** argv)
             receiving = true;
             end = std::chrono::steady_clock::now();
         }
+        lk.unlock();
 
         if ((receiving && std::chrono::duration<double>(std::chrono::steady_clock::now() - end).count() > WAIT_CNST) ||
             (!running  && loop > 1))
         {
             std::chrono::duration<double>  elapsed_secs = end - start;
-            printf("[   micrortps_agent   ]\tSENT:     %lumessages \t- %lubytes\n", (unsigned long)sent, (unsigned long)total_sent);
-            printf("[   micrortps_agent   ]\tRECEIVED: %dmessages \t- %dbytes; %d LOOPS - %.03f seconds - %.02fKB/s\n",
+            printf("[   micrortps_agent   ]\tSENT:     %lu messages \t- %lu bytes\n", (unsigned long)sent, (unsigned long)total_sent);
+            printf("[   micrortps_agent   ]\tRECEIVED: %d messages \t- %d bytes; %d LOOPS - %.03f seconds - %.02fKB/s\n",
                     received, total_read, loop, elapsed_secs.count(), (double)total_read/(1000*elapsed_secs.count()));
             received = sent = total_read = total_sent = 0;
             receiving = false;
